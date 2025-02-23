@@ -1,0 +1,7 @@
+# Target directory (build artifacts)
+target/
+
+# Cargo-specific files
+Cargo.lock
+.cargo/
+

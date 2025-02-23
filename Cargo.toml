@@ -1,0 +1,21 @@
+[package]
+name = "rust-ml-benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = "0.25.5"
+ndarray = "0.16.1"
+ort = "=2.0.0-rc.9"
+sysinfo = "0.33.1"
+
+[profile.release-lto]
+inherits = "release"
+lto = true
+strip = "debuginfo"
+
+[profile.release-lto.build-override]
+opt-level = 3
+codegen-units = 256
+debug = false
+debug-assertions = false
