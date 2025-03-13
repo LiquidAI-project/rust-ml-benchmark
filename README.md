@@ -5,8 +5,8 @@ This repository contains the code to benchmark ML inference using Rust.
 
 ## Folder Structure
 
-- [src/main.rs](src/main.rs file)
-    - Contains the main Rust program containing the benchmark as well as the inference code
+- [src/main.rs](src/main.rs) 
+    - Contains the main.rs Rust program containing the benchmark as well as the inference code
 - [assets/](assets/) folder
     - Contains the assets including models and images which will be used for ML inference
 
