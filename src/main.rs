@@ -89,7 +89,7 @@ fn main() -> ort::Result<()> {
 
     let metrics: Metrics = Metrics {
         wall_clock_time: wall_clock_time,
-        user_time: process.syste(),
+        user_time: process.cpu_usage(),
         system_time: process.cpu_usage(),
         max_rss: process.memory(),
         swap_memory: (process.virtual_memory() - process.memory()),
