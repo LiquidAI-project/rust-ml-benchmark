@@ -8,8 +8,6 @@ fn main() -> ort::Result<()> {
     let mut system = System::new_all();
     system.refresh_all();
 
-    let start_time = Instant::now();
-
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("Usage: {} <model> <image>", args[0]);
@@ -19,9 +17,13 @@ fn main() -> ort::Result<()> {
     let model: &str = &args[1];
     let image: &str = &args[2];
 
+    let start_time = Instant::now();
+
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
+
+    let env_load_time = start_time.elapsed();
 
     let original_img = image::open(image).unwrap();
     let (img_width, img_height) = (original_img.width(), original_img.height());
@@ -30,6 +32,7 @@ fn main() -> ort::Result<()> {
         "Loaded image with height {:?} and width {:?} ",
         img_height, img_width
     );
+    let image_load_time = start_time.elapsed() - env_load_time;
 
     let img = original_img.resize_exact(224, 224, FilterType::CatmullRom);
     let mut input = Array::zeros((1, 3, 224, 224));
@@ -42,7 +45,11 @@ fn main() -> ort::Result<()> {
         input[[0, 2, y, x]] = (b as f32) / 255.;
     }
 
+    let image_processing_time = start_time.elapsed() - image_load_time;
+
     let model = Session::builder()?.commit_from_file(model)?;
+
+    let model_load_time = start_time.elapsed() - image_processing_time;
 
     let outputs = model.run(ort::inputs![input]?)?;
 
@@ -55,10 +62,10 @@ fn main() -> ort::Result<()> {
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
         .unwrap();
 
+    let wall_clock_time = start_time.elapsed();
+    let model_run_time = wall_clock_time - model_load_time;
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
-
-    let wall_clock_time = start_time.elapsed();
 
     let pid = std::process::id();
     let process = system
@@ -67,14 +74,28 @@ fn main() -> ort::Result<()> {
 
     let user_time = process.cpu_usage();
     let system_time = process.cpu_usage();
-    let max_rss = process.memory();
+    let max_rss = process.virtual_memory();
     let cpu_usage = system.global_cpu_usage();
 
-    println!("Wall clock time: {:?}", wall_clock_time);
+    println!();
+
+    println!("=================Load times Results===================");
+    println!("Env load time: {:?}", env_load_time);
+    println!("Image load time: {:?}", image_load_time);
+    println!("Image Processing time: {:?}", image_processing_time);
+    println!("Model Load time: {:?}", model_load_time);
+    println!("Model run took time: {:?}", model_run_time);
+    println!("=======================================================");
+
+    println!();
+
+    println!("=================Benchmarking Results==================");
+    println!("Wall Clock Time: {:?}", wall_clock_time);
     println!("CPU usage: {:.2}%", cpu_usage);
     println!("User time: {:.2}%", user_time);
     println!("System time: {:.2}%", system_time);
     println!("Max RSS: {} bytes", max_rss);
+    println!("========================================================");
 
     Ok(())
 }
