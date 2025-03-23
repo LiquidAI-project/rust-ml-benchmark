@@ -1,0 +1,20 @@
+name: Rust CI
+
+on: 
+  push:
+  pull_request:
+
+jobs:
+  check-build:
+    name: Check if Rust Code Compiles
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check if the code compiles
+        run: cargo check --verbose
