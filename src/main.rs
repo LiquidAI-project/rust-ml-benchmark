@@ -10,7 +10,6 @@ use std::{
     env,
     time::{Duration, Instant},
 };
-use sysinfo::{Pid, Process, System};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,8 +20,6 @@ enum AppError {
     ImageLoadError(#[from] image::ImageError),
     #[error("ORT error: {0}")]
     OrtError(#[from] OrtError),
-    #[error("Process not found")]
-    ProcessNotFound,
 }
 
 #[derive(Debug)]
@@ -40,10 +37,9 @@ struct Metrics {
     user_time: Duration,
     system_time: Duration,
     max_rss: u64,
-    swap_memory: u64,
 }
 
-fn get_cpu_times() -> (Duration, Duration) {
+fn get_benchmark_metrics() -> (Duration, Duration, u64) {
     unsafe {
         let mut usage: rusage = std::mem::zeroed();
         getrusage(RUSAGE_SELF, &mut usage);
@@ -53,8 +49,10 @@ fn get_cpu_times() -> (Duration, Duration) {
 
         let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
             + Duration::from_micros(usage.ru_stime.tv_usec as u64);
+        
+        let max_rss : u64 = usage.ru_maxrss as u64;
 
-        (user_time, system_time)
+        (user_time, system_time, max_rss)
     }
 }
 
@@ -78,9 +76,6 @@ fn process_image(original_img: DynamicImage) -> ArrayBase<OwnedRepr<f32>, Dim<[u
 }
 
 fn main() -> Result<(), AppError> {
-    let mut system: System = System::new_all();
-    system.refresh_all();
-
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         return Err(AppError::UsageError(args[0].clone()));
@@ -131,12 +126,7 @@ fn main() -> Result<(), AppError> {
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
 
-    let pid: u32 = std::process::id();
-    let process: &Process = system
-        .process(Pid::from_u32(pid))
-        .ok_or(AppError::ProcessNotFound)?;
-
-    let (user_time, system_time) = get_cpu_times();
+    let (user_time, system_time, max_rss) = get_benchmark_metrics();
 
     let load_times = LoadTimes {
         env_load_time,
@@ -146,12 +136,11 @@ fn main() -> Result<(), AppError> {
         model_run_time,
     };
 
-    let metrics = Metrics {
+    let metrics: Metrics = Metrics {
         wall_clock_time,
         user_time,
         system_time,
-        max_rss: process.memory(),
-        swap_memory: process.virtual_memory(),
+        max_rss,
     };
 
     print_load_times(&load_times);
@@ -190,6 +179,5 @@ fn print_metrics(metrics: &Metrics) {
     println!("User time: {:?}", metrics.user_time);
     println!("System time: {:?}", metrics.system_time);
     println!("Max RSS: {} bytes", metrics.max_rss);
-    println!("Swap memory: {} bytes", metrics.swap_memory);
     println!("========================================================");
 }
