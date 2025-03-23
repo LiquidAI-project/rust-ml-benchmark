@@ -8,6 +8,7 @@ image = "0.25.5"
 ndarray = "0.16.1"
 ort = "=2.0.0-rc.9"
 sysinfo = "0.33.1"
+libc = "0.2"
 
 [profile.release-lto]
 inherits = "release"

@@ -32,9 +32,11 @@ fn get_cpu_times() -> (Duration, Duration) {
         let mut usage: rusage = std::mem::zeroed();
         getrusage(RUSAGE_SELF, &mut usage);
 
-        let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64);
+        let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64)
+            + Duration::from_micros(usage.ru_utime.tv_usec as u64);
 
-        let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64);
+        let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
+            + Duration::from_micros(usage.ru_stime.tv_usec as u64);
 
         (user_time, system_time)
     }
