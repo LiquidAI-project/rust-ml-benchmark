@@ -4,13 +4,30 @@ use ndarray::{Array, ArrayBase, Dim, IxDynImpl, OwnedRepr, ViewRepr};
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{Session, SessionOutputs},
+    Error as OrtError,
 };
 use std::{
     env,
     time::{Duration, Instant},
 };
 use sysinfo::{Pid, Process, System};
+use thiserror::Error;
 
+#[derive(Debug, Error)]
+enum AppError {
+    #[error("Usage: {} <model> <image>", .0)]
+    UsageError(String),
+    #[error("Failed to load image: {0}")]
+    ImageLoadError(#[from] image::ImageError),
+    #[error("ORT error: {0}")]
+    OrtError(#[from] OrtError),
+    #[error("System error: {0}")]
+    SystemError(String),
+    #[error("Process not found")]
+    ProcessNotFound,
+}
+
+#[derive(Debug)]
 struct LoadTimes {
     env_load_time: Duration,
     image_load_time: Duration,
@@ -19,6 +36,7 @@ struct LoadTimes {
     model_run_time: Duration,
 }
 
+#[derive(Debug)]
 struct Metrics {
     wall_clock_time: Duration,
     user_time: Duration,
@@ -41,18 +59,23 @@ fn get_cpu_times() -> (Duration, Duration) {
         (user_time, system_time)
     }
 }
-fn main() -> ort::Result<()> {
-    let mut system = System::new_all();
+
+fn load_model(model_path: &str) -> Result<Session, OrtError> {
+    let model = Session::builder()?.commit_from_file(model_path)?;
+    Ok(model)
+}
+
+fn main() -> Result<(), AppError> {
+    let mut system: System = System::new_all();
     system.refresh_all();
 
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
-        println!("Usage: {} <model> <image>", args[0]);
-        return Ok(());
+        return Err(AppError::UsageError(args[0].clone()));
     }
 
-    let model: &str = &args[1];
-    let image: &str = &args[2];
+    let model_path: &str = &args[1];
+    let image_path: &str = &args[2];
 
     let start_time: Instant = Instant::now();
 
@@ -62,7 +85,7 @@ fn main() -> ort::Result<()> {
 
     let env_load_time: Duration = start_time.elapsed();
 
-    let original_img: DynamicImage = image::open(image).unwrap();
+    let original_img: DynamicImage = image::open(image_path)?;
     let (img_width, img_height) = (original_img.width(), original_img.height());
 
     println!(
@@ -84,7 +107,7 @@ fn main() -> ort::Result<()> {
 
     let image_processing_time: Duration = start_time.elapsed();
 
-    let model: Session = Session::builder()?.commit_from_file(model)?;
+    let model = load_model(model_path).map_err(AppError::OrtError)?;
 
     let model_load_time: Duration = start_time.elapsed();
 
@@ -108,7 +131,7 @@ fn main() -> ort::Result<()> {
     let pid: u32 = std::process::id();
     let process: &Process = system
         .process(Pid::from_u32(pid))
-        .expect("Process not found");
+        .ok_or(AppError::ProcessNotFound)?;
 
     let (user_time, system_time) = get_cpu_times();
 
@@ -122,10 +145,10 @@ fn main() -> ort::Result<()> {
 
     let metrics = Metrics {
         wall_clock_time,
-        user_time: user_time,
-        system_time: system_time,
+        user_time,
+        system_time,
         max_rss: process.memory(),
-        swap_memory: (process.virtual_memory()),
+        swap_memory: process.virtual_memory(),
     };
 
     print_load_times(&load_times);
