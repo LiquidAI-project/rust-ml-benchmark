@@ -1,4 +1,5 @@
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
+use libc::{getrusage, rusage, RUSAGE_SELF};
 use ndarray::{Array, ArrayBase, Dim, IxDynImpl, OwnedRepr, ViewRepr};
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -20,12 +21,24 @@ struct LoadTimes {
 
 struct Metrics {
     wall_clock_time: Duration,
-    user_time: f32,
-    system_time: f32,
+    user_time: Duration,
+    system_time: Duration,
     max_rss: u64,
     swap_memory: u64,
 }
 
+fn get_cpu_times() -> (Duration, Duration) {
+    unsafe {
+        let mut usage: rusage = std::mem::zeroed();
+        getrusage(RUSAGE_SELF, &mut usage);
+
+        let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64);
+
+        let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64);
+
+        (user_time, system_time)
+    }
+}
 fn main() -> ort::Result<()> {
     let mut system = System::new_all();
     system.refresh_all();
@@ -95,6 +108,8 @@ fn main() -> ort::Result<()> {
         .process(Pid::from_u32(pid))
         .expect("Process not found");
 
+    let (user_time, system_time) = get_cpu_times();
+
     let load_times = LoadTimes {
         env_load_time,
         image_load_time,
@@ -105,8 +120,8 @@ fn main() -> ort::Result<()> {
 
     let metrics = Metrics {
         wall_clock_time,
-        user_time: process.cpu_usage(),
-        system_time: process.cpu_usage(),
+        user_time: user_time,
+        system_time: system_time,
         max_rss: process.memory(),
         swap_memory: (process.virtual_memory()),
     };
@@ -144,9 +159,8 @@ fn print_load_times(load_times: &LoadTimes) {
 fn print_metrics(metrics: &Metrics) {
     println!("=================Benchmarking Results==================");
     println!("Wall Clock Time: {:?}", metrics.wall_clock_time);
-    println!("CPU usage: {:.2}%", metrics.system_time);
-    println!("User time: {:.2}%", metrics.user_time);
-    println!("System time: {:.2}%", metrics.system_time);
+    println!("User time: {:?}", metrics.user_time);
+    println!("System time: {:?}", metrics.system_time);
     println!("Max RSS: {} bytes", metrics.max_rss);
     println!("Swap memory: {} bytes", metrics.swap_memory);
     println!("========================================================");
