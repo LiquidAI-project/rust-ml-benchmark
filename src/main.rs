@@ -54,7 +54,7 @@ fn main() -> ort::Result<()> {
         "Loaded image with height {:?} and width {:?} ",
         img_height, img_width
     );
-    let image_load_time: Duration = start_time.elapsed() - env_load_time;
+    let image_load_time: Duration = start_time.elapsed();
 
     let img: DynamicImage = original_img.resize_exact(224, 224, FilterType::CatmullRom);
     let mut input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = Array::zeros((1, 3, 224, 224));
@@ -67,11 +67,11 @@ fn main() -> ort::Result<()> {
         input[[0, 2, y, x]] = (b as f32) / 255.;
     }
 
-    let image_processing_time: Duration = start_time.elapsed() - image_load_time;
+    let image_processing_time: Duration = start_time.elapsed();
 
     let model: Session = Session::builder()?.commit_from_file(model)?;
 
-    let model_load_time: Duration = start_time.elapsed() - image_processing_time;
+    let model_load_time: Duration = start_time.elapsed();
 
     let outputs: SessionOutputs<'_, '_> = model.run(ort::inputs![input]?)?;
 
@@ -86,7 +86,7 @@ fn main() -> ort::Result<()> {
         .unwrap();
 
     let wall_clock_time: Duration = start_time.elapsed();
-    let model_run_time: Duration = wall_clock_time - model_load_time;
+    let model_run_time: Duration = wall_clock_time;
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
 
@@ -108,7 +108,7 @@ fn main() -> ort::Result<()> {
         user_time: process.cpu_usage(),
         system_time: process.cpu_usage(),
         max_rss: process.memory(),
-        swap_memory: (process.virtual_memory() - process.memory()),
+        swap_memory: (process.virtual_memory()),
     };
 
     print_load_times(&load_times);
@@ -121,10 +121,22 @@ fn print_load_times(load_times: &LoadTimes) {
     println!();
     println!("=================Load times Results===================");
     println!("Env load time: {:?}", load_times.env_load_time);
-    println!("Image load time: {:?}", load_times.image_load_time);
-    println!("Image Processing time: {:?}", load_times.image_processing_time);
-    println!("Model Load time: {:?}", load_times.model_load_time);
-    println!("Model run took time: {:?}", load_times.model_run_time);
+    println!(
+        "Image load time: {:?}",
+        (load_times.image_load_time - load_times.env_load_time)
+    );
+    println!(
+        "Image Processing time: {:?}",
+        (load_times.image_processing_time - load_times.image_load_time)
+    );
+    println!(
+        "Model Load time: {:?}",
+        (load_times.model_load_time - load_times.image_processing_time)
+    );
+    println!(
+        "Model run took time: {:?}",
+        (load_times.model_run_time - load_times.model_load_time)
+    );
     println!("=======================================================");
     println!();
 }
