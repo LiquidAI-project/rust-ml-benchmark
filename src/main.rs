@@ -99,7 +99,7 @@ fn main() -> ort::Result<()> {
         .unwrap();
 
     let wall_clock_time: Duration = start_time.elapsed();
-    let model_run_time: Duration = wall_clock_time;
+    let model_run_time: Duration = start_time.elapsed();
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
 
