@@ -10,6 +10,14 @@ use std::{
 };
 use sysinfo::{Pid, Process, System};
 
+struct LoadTimes {
+    env_load_time: Duration,
+    image_load_time: Duration,
+    image_processing_time: Duration,
+    model_load_time: Duration,
+    model_run_time: Duration,
+}
+
 struct Metrics {
     wall_clock_time: Duration,
     user_time: f32,
@@ -87,26 +95,41 @@ fn main() -> ort::Result<()> {
         .process(Pid::from_u32(pid))
         .expect("Process not found");
 
-    let metrics: Metrics = Metrics {
-        wall_clock_time: wall_clock_time,
+    let load_times = LoadTimes {
+        env_load_time,
+        image_load_time,
+        image_processing_time,
+        model_load_time,
+        model_run_time,
+    };
+
+    let metrics = Metrics {
+        wall_clock_time,
         user_time: process.cpu_usage(),
         system_time: process.cpu_usage(),
         max_rss: process.memory(),
         swap_memory: (process.virtual_memory() - process.memory()),
     };
 
-    println!();
+    print_load_times(&load_times);
+    print_metrics(&metrics);
 
+    Ok(())
+}
+
+fn print_load_times(load_times: &LoadTimes) {
+    println!();
     println!("=================Load times Results===================");
-    println!("Env load time: {:?}", env_load_time);
-    println!("Image load time: {:?}", image_load_time);
-    println!("Image Processing time: {:?}", image_processing_time);
-    println!("Model Load time: {:?}", model_load_time);
-    println!("Model run took time: {:?}", model_run_time);
+    println!("Env load time: {:?}", load_times.env_load_time);
+    println!("Image load time: {:?}", load_times.image_load_time);
+    println!("Image Processing time: {:?}", load_times.image_processing_time);
+    println!("Model Load time: {:?}", load_times.model_load_time);
+    println!("Model run took time: {:?}", load_times.model_run_time);
     println!("=======================================================");
-
     println!();
+}
 
+fn print_metrics(metrics: &Metrics) {
     println!("=================Benchmarking Results==================");
     println!("Wall Clock Time: {:?}", metrics.wall_clock_time);
     println!("CPU usage: {:.2}%", metrics.system_time);
@@ -115,6 +138,4 @@ fn main() -> ort::Result<()> {
     println!("Max RSS: {} bytes", metrics.max_rss);
     println!("Swap memory: {} bytes", metrics.swap_memory);
     println!("========================================================");
-
-    Ok(())
 }
