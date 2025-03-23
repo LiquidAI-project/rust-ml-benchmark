@@ -21,8 +21,6 @@ enum AppError {
     ImageLoadError(#[from] image::ImageError),
     #[error("ORT error: {0}")]
     OrtError(#[from] OrtError),
-    #[error("System error: {0}")]
-    SystemError(String),
     #[error("Process not found")]
     ProcessNotFound,
 }
@@ -65,6 +63,20 @@ fn load_model(model_path: &str) -> Result<Session, OrtError> {
     Ok(model)
 }
 
+fn process_image(original_img: DynamicImage) -> ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> {
+    let img: DynamicImage = original_img.resize_exact(224, 224, FilterType::CatmullRom);
+    let mut input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = Array::zeros((1, 3, 224, 224));
+    for pixel in img.pixels() {
+        let x: usize = pixel.0 as _;
+        let y: usize = pixel.1 as _;
+        let [r, g, b, _] = pixel.2 .0;
+        input[[0, 0, y, x]] = (r as f32) / 255.;
+        input[[0, 1, y, x]] = (g as f32) / 255.;
+        input[[0, 2, y, x]] = (b as f32) / 255.;
+    }
+    input
+}
+
 fn main() -> Result<(), AppError> {
     let mut system: System = System::new_all();
     system.refresh_all();
@@ -94,16 +106,7 @@ fn main() -> Result<(), AppError> {
     );
     let image_load_time: Duration = start_time.elapsed();
 
-    let img: DynamicImage = original_img.resize_exact(224, 224, FilterType::CatmullRom);
-    let mut input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = Array::zeros((1, 3, 224, 224));
-    for pixel in img.pixels() {
-        let x: usize = pixel.0 as _;
-        let y: usize = pixel.1 as _;
-        let [r, g, b, _] = pixel.2 .0;
-        input[[0, 0, y, x]] = (r as f32) / 255.;
-        input[[0, 1, y, x]] = (g as f32) / 255.;
-        input[[0, 2, y, x]] = (b as f32) / 255.;
-    }
+    let input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = process_image(original_img);
 
     let image_processing_time: Duration = start_time.elapsed();
 
