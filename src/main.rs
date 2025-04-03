@@ -22,42 +22,112 @@ enum AppError {
     OrtError(#[from] OrtError),
 }
 
-#[derive(Debug)]
-struct LoadTimes {
-    env_load_time: Duration,
-    image_load_time: Duration,
-    image_processing_time: Duration,
-    model_load_time: Duration,
-    model_run_time: Duration,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Metrics {
+    name: String,
+    timestamp: Instant,
     wall_clock_time: Duration,
     user_time: Duration,
     system_time: Duration,
     max_rss: u64,
 }
 
-fn get_benchmark_metrics() -> (Duration, Duration, u64) {
-    unsafe {
-        let mut usage: rusage = std::mem::zeroed();
-        getrusage(RUSAGE_SELF, &mut usage);
+impl Metrics {
+    fn current(name: String) -> Self {
+        unsafe {
+            let mut usage: rusage = std::mem::zeroed();
+            getrusage(RUSAGE_SELF, &mut usage);
 
-        let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64)
-            + Duration::from_micros(usage.ru_utime.tv_usec as u64);
+            let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64)
+                + Duration::from_micros(usage.ru_utime.tv_usec as u64);
 
-        let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
-            + Duration::from_micros(usage.ru_stime.tv_usec as u64);
-        
-        let max_rss : u64 = usage.ru_maxrss as u64;
+            let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
+                + Duration::from_micros(usage.ru_stime.tv_usec as u64);
 
-        (user_time, system_time, max_rss)
+            Self {
+                name,
+                timestamp: Instant::now(),
+                wall_clock_time: Duration::default(),
+                user_time,
+                system_time,
+                max_rss: usage.ru_maxrss as u64,
+            }
+        }
+    }
+
+    fn diff(&self, prev: &Self) -> Self {
+        Self {
+            name: self.name.clone(),
+            timestamp: self.timestamp,
+            wall_clock_time: self.timestamp.duration_since(prev.timestamp),
+            user_time: self.user_time - prev.user_time,
+            system_time: self.system_time - prev.system_time,
+            max_rss: self.max_rss,
+        }
+    }
+}
+
+impl std::fmt::Display for Metrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "============= {} Metrics =============", self.name)?;
+        writeln!(f, "Wall Clock Time: {:?}", self.wall_clock_time)?;
+        writeln!(f, "User time: {:?}", self.user_time)?;
+        writeln!(f, "System time: {:?}", self.system_time)?;
+        writeln!(f, "Max RSS: {} bytes", self.max_rss)?;
+        writeln!(f, "=======================================")
+    }
+}
+
+#[derive(Debug)]
+struct BenchmarkTracker {
+    start_metrics: Metrics,
+    current_operation: Option<Metrics>,
+    completed_metrics: Vec<Metrics>,
+}
+
+impl BenchmarkTracker {
+    fn new() -> Self {
+        Self {
+            start_metrics: Metrics::current("Total".to_string()),
+            current_operation: None,
+            completed_metrics: Vec::new(),
+        }
+    }
+
+    fn start_operation(&mut self, name: &str) {
+        self.current_operation = Some(Metrics::current(name.to_string()));
+    }
+
+    fn finish_operation(&mut self) {
+        if let Some(start_metrics) = self.current_operation.take() {
+            self.finish_operation_internal(start_metrics);
+        }
+    }
+
+    fn finish_operation_internal(&mut self, start_metrics: Metrics) {
+        let end_metrics: Metrics = Metrics::current(start_metrics.name.clone());
+        let diff_metrics: Metrics = end_metrics.diff(&start_metrics);
+
+        self.completed_metrics.push(diff_metrics);
+    }
+
+    fn get_total_metrics(&self) -> Metrics {
+        let current: Metrics = Metrics::current("Total".to_string());
+        current.diff(&self.start_metrics)
+    }
+
+    fn print_all_metrics(&self) {
+        for metrics in &self.completed_metrics {
+            print!("{}", metrics);
+        }
+
+        let total: Metrics = self.get_total_metrics();
+        print!("{}", total);
     }
 }
 
 fn load_model(model_path: &str) -> Result<Session, OrtError> {
-    let model = Session::builder()?.commit_from_file(model_path)?;
+    let model: Session = Session::builder()?.commit_from_file(model_path)?;
     Ok(model)
 }
 
@@ -84,31 +154,27 @@ fn main() -> Result<(), AppError> {
     let model_path: &str = &args[1];
     let image_path: &str = &args[2];
 
-    let start_time: Instant = Instant::now();
+    let mut tracker: BenchmarkTracker = BenchmarkTracker::new();
 
+    tracker.start_operation("Env Load");
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
+    tracker.finish_operation();
 
-    let env_load_time: Duration = start_time.elapsed();
-
+    tracker.start_operation("Image Load");
     let original_img: DynamicImage = image::open(image_path)?;
-    let (img_width, img_height) = (original_img.width(), original_img.height());
+    tracker.finish_operation();
 
-    println!(
-        "Loaded image with height {:?} and width {:?} ",
-        img_height, img_width
-    );
-    let image_load_time: Duration = start_time.elapsed();
-
+    tracker.start_operation("Image Processing");
     let input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = process_image(original_img);
+    tracker.finish_operation();
 
-    let image_processing_time: Duration = start_time.elapsed();
+    tracker.start_operation("Model Load");
+    let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
+    tracker.finish_operation();
 
-    let model = load_model(model_path).map_err(AppError::OrtError)?;
-
-    let model_load_time: Duration = start_time.elapsed();
-
+    tracker.start_operation("Model Run");
     let outputs: SessionOutputs<'_, '_> = model.run(ort::inputs![input]?)?;
 
     let output_tensor: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>> =
@@ -120,64 +186,12 @@ fn main() -> Result<(), AppError> {
         .enumerate()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
         .unwrap();
+    tracker.finish_operation();
 
-    let wall_clock_time: Duration = start_time.elapsed();
-    let model_run_time: Duration = start_time.elapsed();
+    tracker.print_all_metrics();
+
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
 
-    let (user_time, system_time, max_rss) = get_benchmark_metrics();
-
-    let load_times = LoadTimes {
-        env_load_time,
-        image_load_time,
-        image_processing_time,
-        model_load_time,
-        model_run_time,
-    };
-
-    let metrics: Metrics = Metrics {
-        wall_clock_time,
-        user_time,
-        system_time,
-        max_rss,
-    };
-
-    print_load_times(&load_times);
-    print_metrics(&metrics);
-
     Ok(())
-}
-
-fn print_load_times(load_times: &LoadTimes) {
-    println!();
-    println!("=================Load times Results===================");
-    println!("Env load time: {:?}", load_times.env_load_time);
-    println!(
-        "Image load time: {:?}",
-        (load_times.image_load_time - load_times.env_load_time)
-    );
-    println!(
-        "Image Processing time: {:?}",
-        (load_times.image_processing_time - load_times.image_load_time)
-    );
-    println!(
-        "Model Load time: {:?}",
-        (load_times.model_load_time - load_times.image_processing_time)
-    );
-    println!(
-        "Model run took time: {:?}",
-        (load_times.model_run_time - load_times.model_load_time)
-    );
-    println!("=======================================================");
-    println!();
-}
-
-fn print_metrics(metrics: &Metrics) {
-    println!("=================Benchmarking Results==================");
-    println!("Wall Clock Time: {:?}", metrics.wall_clock_time);
-    println!("User time: {:?}", metrics.user_time);
-    println!("System time: {:?}", metrics.system_time);
-    println!("Max RSS: {} bytes", metrics.max_rss);
-    println!("========================================================");
 }
