@@ -7,7 +7,9 @@ use ort::{
     Error as OrtError,
 };
 use std::{
-    collections::HashMap, env, time::{Duration, Instant}
+    collections::HashMap,
+    env,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
@@ -24,10 +26,10 @@ enum AppError {
 #[derive(Debug, Clone)]
 struct Metrics {
     name: String,
-    timestamp: Instant,       
+    timestamp: Instant,
     wall_clock_time: Duration,
-    user_time: Duration,     
-    system_time: Duration,   
+    user_time: Duration,
+    system_time: Duration,
     max_rss: u64,
 }
 
@@ -36,13 +38,13 @@ impl Metrics {
         unsafe {
             let mut usage: rusage = std::mem::zeroed();
             getrusage(RUSAGE_SELF, &mut usage);
-            
+
             let user_time = Duration::from_secs(usage.ru_utime.tv_sec as u64)
                 + Duration::from_micros(usage.ru_utime.tv_usec as u64);
-            
+
             let system_time = Duration::from_secs(usage.ru_stime.tv_sec as u64)
                 + Duration::from_micros(usage.ru_stime.tv_usec as u64);
-            
+
             Self {
                 name,
                 timestamp: Instant::now(),
@@ -53,7 +55,7 @@ impl Metrics {
             }
         }
     }
-    
+
     fn diff(&self, prev: &Self) -> Self {
         Self {
             name: self.name.clone(),
@@ -92,34 +94,35 @@ impl BenchmarkTracker {
             completed_metrics: HashMap::new(),
         }
     }
-    
+
     fn start_operation(&mut self, name: &str) {
         self.current_operation = Some(Metrics::current(name.to_string()));
     }
-    
+
     fn finish_operation(&mut self) {
         if let Some(start_metrics) = self.current_operation.take() {
             self.finish_operation_internal(start_metrics);
         }
     }
-    
+
     fn finish_operation_internal(&mut self, start_metrics: Metrics) {
         let end_metrics = Metrics::current(start_metrics.name.clone());
         let diff_metrics = end_metrics.diff(&start_metrics);
-        
-        self.completed_metrics.insert(diff_metrics.name.clone(), diff_metrics);
+
+        self.completed_metrics
+            .insert(diff_metrics.name.clone(), diff_metrics);
     }
-    
+
     fn get_total_metrics(&self) -> Metrics {
         let current = Metrics::current("Total".to_string());
         current.diff(&self.start_metrics)
     }
-    
+
     fn print_all_metrics(&self) {
         for (_, metrics) in &self.completed_metrics {
             print!("{}", metrics);
         }
-        
+
         let total = self.get_total_metrics();
         print!("{}", total);
     }
@@ -189,8 +192,7 @@ fn main() -> Result<(), AppError> {
 
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
-    
-    // Use the tracker's method to print all metrics
+
     tracker.print_all_metrics();
 
     Ok(())
