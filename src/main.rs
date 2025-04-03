@@ -190,10 +190,10 @@ fn main() -> Result<(), AppError> {
         .unwrap();
     tracker.finish_operation();
 
+    tracker.print_all_metrics();
+
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
-
-    tracker.print_all_metrics();
 
     Ok(())
 }
