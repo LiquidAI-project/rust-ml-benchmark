@@ -7,7 +7,6 @@ use ort::{
     Error as OrtError,
 };
 use std::{
-    collections::HashMap,
     env,
     time::{Duration, Instant},
 };
@@ -83,7 +82,7 @@ impl std::fmt::Display for Metrics {
 struct BenchmarkTracker {
     start_metrics: Metrics,
     current_operation: Option<Metrics>,
-    completed_metrics: HashMap<String, Metrics>,
+    completed_metrics: Vec<Metrics>,
 }
 
 impl BenchmarkTracker {
@@ -91,7 +90,7 @@ impl BenchmarkTracker {
         Self {
             start_metrics: Metrics::current("Total".to_string()),
             current_operation: None,
-            completed_metrics: HashMap::new(),
+            completed_metrics: Vec::new(),
         }
     }
 
@@ -109,8 +108,7 @@ impl BenchmarkTracker {
         let end_metrics: Metrics = Metrics::current(start_metrics.name.clone());
         let diff_metrics: Metrics = end_metrics.diff(&start_metrics);
 
-        self.completed_metrics
-            .insert(diff_metrics.name.clone(), diff_metrics);
+        self.completed_metrics.push(diff_metrics);
     }
 
     fn get_total_metrics(&self) -> Metrics {
@@ -119,7 +117,7 @@ impl BenchmarkTracker {
     }
 
     fn print_all_metrics(&self) {
-        for (_, metrics) in &self.completed_metrics {
+        for metrics in &self.completed_metrics {
             print!("{}", metrics);
         }
 
