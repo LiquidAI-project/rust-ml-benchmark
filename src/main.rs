@@ -117,11 +117,12 @@ impl BenchmarkTracker {
     }
 
     fn print_all_metrics(&self) {
+        let total: Metrics = self.get_total_metrics();
+        
         for metrics in &self.completed_metrics {
             print!("{}", metrics);
         }
 
-        let total: Metrics = self.get_total_metrics();
         print!("{}", total);
     }
 }
