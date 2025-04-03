@@ -39,10 +39,10 @@ impl Metrics {
             let mut usage: rusage = std::mem::zeroed();
             getrusage(RUSAGE_SELF, &mut usage);
 
-            let user_time = Duration::from_secs(usage.ru_utime.tv_sec as u64)
+            let user_time: Duration = Duration::from_secs(usage.ru_utime.tv_sec as u64)
                 + Duration::from_micros(usage.ru_utime.tv_usec as u64);
 
-            let system_time = Duration::from_secs(usage.ru_stime.tv_sec as u64)
+            let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
                 + Duration::from_micros(usage.ru_stime.tv_usec as u64);
 
             Self {
@@ -106,15 +106,15 @@ impl BenchmarkTracker {
     }
 
     fn finish_operation_internal(&mut self, start_metrics: Metrics) {
-        let end_metrics = Metrics::current(start_metrics.name.clone());
-        let diff_metrics = end_metrics.diff(&start_metrics);
+        let end_metrics: Metrics = Metrics::current(start_metrics.name.clone());
+        let diff_metrics: Metrics = end_metrics.diff(&start_metrics);
 
         self.completed_metrics
             .insert(diff_metrics.name.clone(), diff_metrics);
     }
 
     fn get_total_metrics(&self) -> Metrics {
-        let current = Metrics::current("Total".to_string());
+        let current: Metrics = Metrics::current("Total".to_string());
         current.diff(&self.start_metrics)
     }
 
@@ -123,13 +123,13 @@ impl BenchmarkTracker {
             print!("{}", metrics);
         }
 
-        let total = self.get_total_metrics();
+        let total: Metrics = self.get_total_metrics();
         print!("{}", total);
     }
 }
 
 fn load_model(model_path: &str) -> Result<Session, OrtError> {
-    let model = Session::builder()?.commit_from_file(model_path)?;
+    let model: Session = Session::builder()?.commit_from_file(model_path)?;
     Ok(model)
 }
 
@@ -156,7 +156,7 @@ fn main() -> Result<(), AppError> {
     let model_path: &str = &args[1];
     let image_path: &str = &args[2];
 
-    let mut tracker = BenchmarkTracker::new();
+    let mut tracker: BenchmarkTracker = BenchmarkTracker::new();
 
     tracker.start_operation("Env Load");
     ort::init()
@@ -173,7 +173,7 @@ fn main() -> Result<(), AppError> {
     tracker.finish_operation();
 
     tracker.start_operation("Model Load");
-    let model = load_model(model_path).map_err(AppError::OrtError)?;
+    let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
     tracker.finish_operation();
 
     tracker.start_operation("Model Run");
