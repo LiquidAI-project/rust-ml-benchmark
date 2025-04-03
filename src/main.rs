@@ -62,7 +62,7 @@ impl Metrics {
             wall_clock_time: self.timestamp.duration_since(prev.timestamp),
             user_time: self.user_time - prev.user_time,
             system_time: self.system_time - prev.system_time,
-            max_rss: self.max_rss,
+            max_rss: self.max_rss - prev.max_rss,
         }
     }
 }
