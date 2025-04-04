@@ -30,6 +30,7 @@ struct Metrics {
     user_time: Duration,
     system_time: Duration,
     max_rss: u64,
+    cpu_usage: f32,
 }
 
 impl Metrics {
@@ -44,6 +45,7 @@ impl Metrics {
             let system_time: Duration = Duration::from_secs(usage.ru_stime.tv_sec as u64)
                 + Duration::from_micros(usage.ru_stime.tv_usec as u64);
 
+            let cpu_usage: f32 = 0.0;
             Self {
                 name,
                 timestamp: Instant::now(),
@@ -51,18 +53,31 @@ impl Metrics {
                 user_time,
                 system_time,
                 max_rss: usage.ru_maxrss as u64,
+                cpu_usage,
             }
         }
     }
 
     fn diff(&self, prev: &Self) -> Self {
+        let wall_clock_time: Duration = self.timestamp.duration_since(prev.timestamp);
+        let user_time: Duration = self.user_time - prev.user_time;
+        let system_time: Duration = self.system_time - prev.system_time;
+
+        let cpu_usage: f32 = if wall_clock_time.as_secs_f32() > 0.0 {
+            let cpu_time: f32 = (user_time + system_time).as_secs_f32();
+            (cpu_time / wall_clock_time.as_secs_f32()) * 100.0
+        } else {
+            0.0
+        };
+
         Self {
             name: self.name.clone(),
             timestamp: self.timestamp,
-            wall_clock_time: self.timestamp.duration_since(prev.timestamp),
-            user_time: self.user_time - prev.user_time,
-            system_time: self.system_time - prev.system_time,
-            max_rss: self.max_rss - prev.max_rss,
+            wall_clock_time,
+            user_time,
+            system_time,
+            max_rss: self.max_rss,
+            cpu_usage,
         }
     }
 }
@@ -74,6 +89,7 @@ impl std::fmt::Display for Metrics {
         writeln!(f, "User time: {:?}", self.user_time)?;
         writeln!(f, "System time: {:?}", self.system_time)?;
         writeln!(f, "Max RSS: {} bytes", self.max_rss)?;
+        writeln!(f, "CPU Usage: {}%", self.cpu_usage)?;
         writeln!(f, "=======================================")
     }
 }
