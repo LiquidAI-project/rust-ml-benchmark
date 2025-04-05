@@ -90,6 +90,7 @@ impl Metrics {
             user_time: self.user_time + other.user_time,
             system_time: self.system_time + other.system_time,
             max_rss: self.max_rss.max(other.max_rss),
+            cpu_usage: self.cpu_usage,
         }
     }
 }
