@@ -77,20 +77,31 @@ impl Metrics {
             wall_clock_time,
             user_time,
             system_time,
-            max_rss: self.max_rss,
+            max_rss: self.max_rss - prev.max_rss,
             cpu_usage,
         }
     }
 
     fn combine(&self, other: &Self) -> Self {
+        let combined_wall_clock = self.wall_clock_time + other.wall_clock_time;
+        let combined_user_time = self.user_time + other.user_time;
+        let combined_system_time = self.system_time + other.system_time;
+
+        let cpu_usage = if combined_wall_clock.as_secs_f32() > 0.0 {
+            let cpu_time = (combined_user_time + combined_system_time).as_secs_f32();
+            (cpu_time / combined_wall_clock.as_secs_f32()) * 100.0
+        } else {
+            0.0
+        };
+
         Self {
             name: self.name.clone(),
             timestamp: self.timestamp,
-            wall_clock_time: self.wall_clock_time + other.wall_clock_time,
-            user_time: self.user_time + other.user_time,
-            system_time: self.system_time + other.system_time,
+            wall_clock_time: combined_wall_clock,
+            user_time: combined_user_time,
+            system_time: combined_system_time,
             max_rss: self.max_rss.max(other.max_rss),
-            cpu_usage: self.cpu_usage,
+            cpu_usage,
         }
     }
 }
@@ -112,8 +123,8 @@ struct BenchmarkTracker {
     start_metrics: Metrics,
     current_operation: Option<Metrics>,
     completed_metrics: Vec<Metrics>,
-    active_groups: HashMap<String, Metrics>,
-    group_metrics: Vec<(String, Metrics)>,
+    active_phases: HashMap<String, Metrics>,
+    phase_metrics: Vec<(String, Metrics)>,
     phase_order: Vec<String>,
 }
 
@@ -123,8 +134,8 @@ impl BenchmarkTracker {
             start_metrics: Metrics::current("Total".to_string()),
             current_operation: None,
             completed_metrics: Vec::new(),
-            active_groups: HashMap::new(),
-            group_metrics: Vec::new(),
+            active_phases: HashMap::new(),
+            phase_metrics: Vec::new(),
             phase_order: Vec::new(),
         }
     }
@@ -144,29 +155,34 @@ impl BenchmarkTracker {
         let diff_metrics: Metrics = end_metrics.diff(&start_metrics);
 
         self.completed_metrics.push(diff_metrics.clone());
-        
-        for (_, group_metrics) in self.active_groups.iter_mut() {
-            let updated_metrics = diff_metrics.clone();
-            let current_group_metrics = group_metrics.clone();
-            *group_metrics = current_group_metrics.combine(&updated_metrics);
+
+        for (_, phase_metrics) in self.active_phases.iter_mut() {
+            *phase_metrics = phase_metrics.combine(&diff_metrics);
         }
     }
 
     fn start_phase(&mut self, phase_name: &str) {
-        let metrics = Metrics::current(phase_name.to_string());
-        self.active_groups.insert(phase_name.to_string(), metrics);
-        
+        let zero_metrics = Metrics {
+            name: phase_name.to_string(),
+            timestamp: Instant::now(),
+            wall_clock_time: Duration::default(),
+            user_time: Duration::default(),
+            system_time: Duration::default(),
+            max_rss: 0,
+            cpu_usage: 0.0,
+        };
+
+        self.active_phases
+            .insert(phase_name.to_string(), zero_metrics);
+
         if !self.phase_order.contains(&phase_name.to_string()) {
             self.phase_order.push(phase_name.to_string());
         }
     }
 
     fn end_phase(&mut self, phase_name: &str) {
-        if let Some(start_metrics) = self.active_groups.remove(phase_name) {
-            let end_metrics = Metrics::current(phase_name.to_string());
-            let diff_metrics = end_metrics.diff(&start_metrics);
-            
-            self.group_metrics.push((phase_name.to_string(), diff_metrics));
+        if let Some(metrics) = self.active_phases.remove(phase_name) {
+            self.phase_metrics.push((phase_name.to_string(), metrics));
         }
     }
 
@@ -176,18 +192,21 @@ impl BenchmarkTracker {
     }
 
     fn print_all_metrics(&self) {
+        let total: Metrics = self.get_total_metrics();
+
         for metrics in &self.completed_metrics {
             print!("{}", metrics);
         }
 
-        if !self.group_metrics.is_empty() {
+        if !self.phase_metrics.is_empty() {
             println!("\n=========== Phase Metrics ===========");
 
-            let group_map: HashMap<String, &Metrics> = self.group_metrics
+            let group_map: HashMap<String, &Metrics> = self
+                .phase_metrics
                 .iter()
                 .map(|(name, metrics)| (name.clone(), metrics))
                 .collect();
-            
+
             for phase_name in &self.phase_order {
                 if let Some(metrics) = group_map.get(phase_name) {
                     print!("{}", metrics);
@@ -196,7 +215,6 @@ impl BenchmarkTracker {
             println!("====================================\n");
         }
 
-        let total: Metrics = self.get_total_metrics();
         print!("{}", total);
     }
 }
@@ -226,7 +244,7 @@ fn post_process_outputs(output_array: &ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>
         .enumerate()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
         .unwrap();
-        
+
     (predicted_index, score)
 }
 
@@ -243,42 +261,42 @@ fn main() -> Result<(), AppError> {
 
     // RED BOX: Environment setup, image loading, processing, and model loading
     tracker.start_phase("RED BOX Phase");
-    
-    tracker.start_operation("Env Load");
+
+    tracker.start_operation("envload");
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
     tracker.finish_operation();
-    
-    tracker.start_operation("Image Load");
+
+    tracker.start_operation("loadmodel");
+    let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
+    tracker.finish_operation();
+
+    tracker.start_operation("readimg");
     let original_img: DynamicImage = image::open(image_path)?;
     tracker.finish_operation();
 
-    tracker.start_operation("Image Processing");
-    let input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = process_image(original_img);
-    tracker.finish_operation();
-    
-    tracker.start_operation("Model Load");
-    let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
-    tracker.finish_operation();
-    
     tracker.end_phase("RED BOX Phase");
 
     // GREEN BOX: Model inference and post-processing
     tracker.start_phase("GREEN BOX Phase");
-    
-    tracker.start_operation("Model Inference");
+
+    tracker.start_operation("Pre-processing");
+    let input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = process_image(original_img);
+    tracker.finish_operation();
+
+    tracker.start_operation("Inference");
     let outputs: SessionOutputs<'_, '_> = model.run(ort::inputs![input]?)?;
     tracker.finish_operation();
 
-    tracker.start_operation("Post Processing");
+    tracker.start_operation("Post-processing");
     let output_tensor: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>> =
         outputs[0].try_extract_tensor::<f32>()?;
     let output_array: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>> = output_tensor.view();
 
     let (predicted_index, score) = post_process_outputs(&output_array);
     tracker.finish_operation();
-    
+
     tracker.end_phase("GREEN BOX Phase");
 
     tracker.print_all_metrics();
