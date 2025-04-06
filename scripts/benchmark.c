@@ -16,21 +16,44 @@ typedef struct
     long max_rss;
 } Metrics;
 
-int parse_line(char *line, const char *prefix, float *val, const char *unit)
+int parse_time_line(char *line, const char *prefix, float *val)
 {
     char *p = strstr(line, prefix);
-    if (p)
-    {
-        p += strlen(prefix);
-        if (unit && strstr(p, unit))
-        {
-            *strstr(p, unit) = '\0';
-        }
-        *val = atof(p);
-        return 1;
-    }
-    return 0;
+    if (!p) return 0;
+
+    p += strlen(prefix);
+    while (*p == ' ') p++;
+
+    float number = 0.0f;
+    char unit[10] = {0};
+
+    if (sscanf(p, "%f%9s", &number, unit) < 1)
+        return 0;
+
+    if (strcmp(unit, "s") == 0 || strcmp(unit, "sec") == 0)
+        number *= 1000;
+    else if (strcmp(unit, "us") == 0 || strcmp(unit, "microseconds") == 0)
+        number /= 1000;
+
+    *val = number;
+    return 1;
 }
+
+int parse_cpu_line(char *line, const char *prefix, float *val)
+{
+    char *p = strstr(line, prefix);
+    if (!p) return 0;
+
+    p += strlen(prefix);
+    while (*p == ' ') p++;
+
+    float number = 0.0f;
+    sscanf(p, "%f", &number);
+
+    *val = number;
+    return 1;
+}
+
 
 int parse_rss(char *line, long *rss)
 {
@@ -54,22 +77,22 @@ int parse_metrics_block(FILE *fp, Metrics *out)
     {
         if (strstr(line, "Wall Clock Time:"))
         {
-            parse_line(line, "Wall Clock Time:", &out->wall_clock, "ms");
+            parse_time_line(line, "Wall Clock Time:", &out->wall_clock);
             found++;
         }
         else if (strstr(line, "User time:"))
         {
-            parse_line(line, "User time:", &out->user_time, "ms");
+            parse_time_line(line, "User time:", &out->user_time);
             found++;
         }
         else if (strstr(line, "System time:"))
         {
-            parse_line(line, "System time:", &out->system_time, "ms");
+            parse_time_line(line, "System time:", &out->system_time);
             found++;
         }
         else if (strstr(line, "CPU Usage:"))
         {
-            parse_line(line, "CPU Usage:", &out->cpu_usage, "%");
+            parse_cpu_line(line, "CPU Usage:", &out->cpu_usage);
             found++;
         }
         else if (strstr(line, "Max RSS:"))
@@ -86,9 +109,9 @@ int parse_metrics_block(FILE *fp, Metrics *out)
     return found == 5;
 }
 
-int write_csv_header(FILE *file, const char *data)
+int write_csv_header(FILE *file)
 {
-    return fprintf(file, "%s\n", data);
+    return fprintf(file, "%s\n", "user_time,system_time,cpu_percent,wallclock_time,max_rss");
 }
 
 void write_csv(FILE *file, Metrics *m)
@@ -140,16 +163,26 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    FILE *loadmodel_metrics_csv = fopen("./bench/loadmodel.csv", "w");
+    FILE *readimg_metrics_csv = fopen("./bench/readimg.csv", "w");
+    FILE *redbox_metrics_csv = fopen("./bench/redbox.csv", "w");
+    FILE *greenbox_metrics_csv = fopen("./bench/greenbox.csv", "w");
     FILE *total_metrics_csv = fopen("./bench/total.csv", "w");
-    if (!total_metrics_csv)
+    if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !greenbox_metrics_csv || !total_metrics_csv)
     {
         fprintf(stderr, "Failed to open CSV file\n");
         return 1;
     }
-    write_csv_header(total_metrics_csv, "user_time,system_time,cpu_percent,wallclock_time,max_rss");
+
+    write_csv_header(loadmodel_metrics_csv);
+    write_csv_header(readimg_metrics_csv);
+    write_csv_header(redbox_metrics_csv);
+    write_csv_header(greenbox_metrics_csv);
+    write_csv_header(total_metrics_csv);
 
     for (int i = 1; i <= num_iterations; i++)
     {
+        printf("Running iteration %d\n", i);
         char command[1024];
         snprintf(command, sizeof(command),
                  "../target/release/rust-ml-benchmark \"%s\" \"%s\" > tmp_output.txt",
@@ -171,19 +204,43 @@ int main(int argc, char *argv[])
         while (fgets(line, sizeof(line), fp))
         {
             Metrics m;
-            if (strstr(line, "Total Metrics"))
+            if (strstr(line, "loadmodel Metrics"))
             {
                 if (parse_metrics_block(fp, &m))
-                {
+                    write_csv(loadmodel_metrics_csv, &m);
+            }
+            else if (strstr(line, "readimg Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(readimg_metrics_csv, &m);
+            }
+            else if (strstr(line, "RED BOX Phase Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(redbox_metrics_csv, &m);
+            }
+            else if (strstr(line, "GREEN BOX Phase Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(greenbox_metrics_csv, &m);
+            }
+            else if (strstr(line, "Total Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
                     write_csv(total_metrics_csv, &m);
-                }
             }
         }
 
         fclose(fp);
     }
 
+    fclose(loadmodel_metrics_csv);
+    fclose(readimg_metrics_csv);
+    fclose(redbox_metrics_csv);
+    fclose(greenbox_metrics_csv);
     fclose(total_metrics_csv);
+
+    printf("Benchmarking completed. CSV files generated \n");
 
     return 0;
 }
