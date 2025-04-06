@@ -26,6 +26,13 @@ cargo run <model> <image>
     - path of the image which will be used for inference
 
 Sample Command:
+
+Debug Mode:
 ```bash
-cargo run "assets/models/mobilenetv2-10.onnx" "assets/images/dog.jpg"
+cargo run "assets/models/mobilenetv2-10.onnx" "assets/imgs/unseen_dog.jpg"
+```
+
+Release Mode:
+```bash
+cargo run --release "assets/models/mobilenetv2-10.onnx" "assets/imgs/unseen_dog.jpg"
 ```
