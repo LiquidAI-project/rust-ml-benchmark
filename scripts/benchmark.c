@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < num_iterations; i++)
     {
         char command[1024];
         snprintf(command, sizeof(command),
