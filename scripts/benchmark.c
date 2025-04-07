@@ -34,7 +34,7 @@ int parse_time_line(char *line, const char *prefix, float *val)
 
     if (strcmp(unit, "s") == 0 || strcmp(unit, "sec") == 0)
         number *= 1000;
-    else if (strcmp(unit, "us") == 0 || strcmp(unit, "microseconds") == 0)
+    else if (strcmp(unit, "µs") == 0 || strcmp(unit, "microseconds") == 0)
         number /= 1000;
 
     *val = number;
@@ -169,9 +169,12 @@ int main(int argc, char *argv[])
     FILE *loadmodel_metrics_csv = fopen("./bench/loadmodel.csv", "w");
     FILE *readimg_metrics_csv = fopen("./bench/readimg.csv", "w");
     FILE *redbox_metrics_csv = fopen("./bench/redbox.csv", "w");
+    FILE *readimg_greenbox_csv = fopen("./bench/readimg_greenbox.csv", "w");
+    FILE *inference_csv = fopen("./bench/inference.csv", "w");
+    FILE *postprocessing_csv = fopen("./bench/postprocessing.csv", "w");
     FILE *greenbox_metrics_csv = fopen("./bench/greenbox.csv", "w");
     FILE *total_metrics_csv = fopen("./bench/total.csv", "w");
-    if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !greenbox_metrics_csv || !total_metrics_csv)
+    if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !readimg_greenbox_csv || !inference_csv || !postprocessing_csv || !greenbox_metrics_csv || !total_metrics_csv)
     {
         fprintf(stderr, "Failed to open CSV file\n");
         return 1;
@@ -180,6 +183,9 @@ int main(int argc, char *argv[])
     write_csv_header(loadmodel_metrics_csv);
     write_csv_header(readimg_metrics_csv);
     write_csv_header(redbox_metrics_csv);
+    write_csv_header(readimg_greenbox_csv);
+    write_csv_header(inference_csv);
+    write_csv_header(postprocessing_csv);
     write_csv_header(greenbox_metrics_csv);
     write_csv_header(total_metrics_csv);
 
@@ -242,6 +248,21 @@ int main(int argc, char *argv[])
             {
                 if (parse_metrics_block(fp, &m))
                     write_csv(redbox_metrics_csv, &m);
+            }
+            else if (strstr(line, "Pre-processing Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(readimg_greenbox_csv, &m);
+            }
+            else if (strstr(line, "Inference Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(inference_csv, &m);
+            }
+            else if (strstr(line, "Post-processing Metrics"))
+            {
+                if (parse_metrics_block(fp, &m))
+                    write_csv(postprocessing_csv, &m);
             }
             else if (strstr(line, "GREEN BOX Phase Metrics"))
             {
