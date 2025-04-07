@@ -19,10 +19,12 @@ typedef struct
 int parse_time_line(char *line, const char *prefix, float *val)
 {
     char *p = strstr(line, prefix);
-    if (!p) return 0;
+    if (!p)
+        return 0;
 
     p += strlen(prefix);
-    while (*p == ' ') p++;
+    while (*p == ' ')
+        p++;
 
     float number = 0.0f;
     char unit[10] = {0};
@@ -42,10 +44,12 @@ int parse_time_line(char *line, const char *prefix, float *val)
 int parse_cpu_line(char *line, const char *prefix, float *val)
 {
     char *p = strstr(line, prefix);
-    if (!p) return 0;
+    if (!p)
+        return 0;
 
     p += strlen(prefix);
-    while (*p == ' ') p++;
+    while (*p == ' ')
+        p++;
 
     float number = 0.0f;
     sscanf(p, "%f", &number);
@@ -53,7 +57,6 @@ int parse_cpu_line(char *line, const char *prefix, float *val)
     *val = number;
     return 1;
 }
-
 
 int parse_rss(char *line, long *rss)
 {
@@ -179,6 +182,27 @@ int main(int argc, char *argv[])
     write_csv_header(redbox_metrics_csv);
     write_csv_header(greenbox_metrics_csv);
     write_csv_header(total_metrics_csv);
+
+    struct stat buffer;
+    if (stat("../target/release/rust-ml-benchmark", &buffer) != 0)
+    {
+        printf("Rust binary not found. Compiling...\n");
+
+        char build_command[1024];
+        snprintf(build_command, sizeof(build_command),
+                 "MODEL_PATH=\"%s\" IMAGE_PATH=\"%s\" cargo build --release --manifest-path=../Cargo.toml",
+                 model_path, image_path);
+
+        if (system(build_command) != 0)
+        {
+            fprintf(stderr, "Rust compilation failed.\n");
+            return 1;
+        }
+    }
+    else
+    {
+        printf("Rust binary found. Skipping compilation.\n");
+    }
 
     for (int i = 1; i <= num_iterations; i++)
     {
