@@ -7,9 +7,11 @@ use ort::{
     Error as OrtError,
 };
 use std::{
-    env,
-    time::{Duration, Instant},
     collections::HashMap,
+    env,
+    sync::Mutex,
+    thread::{self, ThreadId},
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
@@ -121,32 +123,42 @@ impl std::fmt::Display for Metrics {
 #[derive(Debug)]
 struct BenchmarkTracker {
     start_metrics: Metrics,
-    current_operation: Option<Metrics>,
-    completed_metrics: Vec<Metrics>,
-    active_phases: HashMap<String, Metrics>,
-    phase_metrics: Vec<(String, Metrics)>,
-    phase_order: Vec<String>,
+    thread_operations: HashMap<ThreadId, Metrics>,
+    completed_metrics: Mutex<Vec<Metrics>>,
+    active_phases: Mutex<HashMap<String, Metrics>>,
+    phase_metrics: Mutex<Vec<(String, Metrics)>>,
+    phase_order: Mutex<Vec<String>>,
 }
 
 impl BenchmarkTracker {
     fn new() -> Self {
         Self {
             start_metrics: Metrics::current("Total".to_string()),
-            current_operation: None,
-            completed_metrics: Vec::new(),
-            active_phases: HashMap::new(),
-            phase_metrics: Vec::new(),
-            phase_order: Vec::new(),
+            thread_operations: HashMap::new(),
+            completed_metrics: Mutex::new(Vec::new()),
+            active_phases: Mutex::new(HashMap::new()),
+            phase_metrics: Mutex::new(Vec::new()),
+            phase_order: Mutex::new(Vec::new()),
         }
     }
 
     fn start_operation(&mut self, name: &str) {
-        self.current_operation = Some(Metrics::current(name.to_string()));
+        let thread_id: ThreadId = thread::current().id();
+
+        if self.thread_operations.contains_key(&thread_id) {
+            self.finish_operation();
+        }
+        let metrics: Metrics = Metrics::current(name.to_string());
+        self.thread_operations.insert(thread_id, metrics.clone());
     }
 
     fn finish_operation(&mut self) {
-        if let Some(start_metrics) = self.current_operation.take() {
+        let thread_id: ThreadId = thread::current().id();
+
+        if let Some(start_metrics) = self.thread_operations.remove(&thread_id) {
             self.finish_operation_internal(start_metrics);
+        } else {
+            println!("No operation is started yet. Thread {:?}", thread_id);
         }
     }
 
@@ -154,9 +166,11 @@ impl BenchmarkTracker {
         let end_metrics: Metrics = Metrics::current(start_metrics.name.clone());
         let diff_metrics: Metrics = end_metrics.diff(&start_metrics);
 
-        self.completed_metrics.push(diff_metrics.clone());
+        let mut completed_metrics = self.completed_metrics.lock().unwrap();
+        completed_metrics.push(diff_metrics.clone());
 
-        for (_, phase_metrics) in self.active_phases.iter_mut() {
+        let mut active_phases = self.active_phases.lock().unwrap();
+        for (_, phase_metrics) in active_phases.iter_mut() {
             *phase_metrics = phase_metrics.combine(&diff_metrics);
         }
     }
@@ -172,17 +186,20 @@ impl BenchmarkTracker {
             cpu_usage: 0.0,
         };
 
-        self.active_phases
-            .insert(phase_name.to_string(), zero_metrics);
+        let mut active_phases = self.active_phases.lock().unwrap();
+        active_phases.insert(phase_name.to_string(), zero_metrics);
 
-        if !self.phase_order.contains(&phase_name.to_string()) {
-            self.phase_order.push(phase_name.to_string());
+        let mut phase_order = self.phase_order.lock().unwrap();
+        if !phase_order.contains(&phase_name.to_string()) {
+            phase_order.push(phase_name.to_string());
         }
     }
 
     fn end_phase(&mut self, phase_name: &str) {
-        if let Some(metrics) = self.active_phases.remove(phase_name) {
-            self.phase_metrics.push((phase_name.to_string(), metrics));
+        let mut active_phases = self.active_phases.lock().unwrap();
+        if let Some(metrics) = active_phases.remove(phase_name) {
+            let mut phase_metrics = self.phase_metrics.lock().unwrap();
+            phase_metrics.push((phase_name.to_string(), metrics));
         }
     }
 
@@ -194,20 +211,24 @@ impl BenchmarkTracker {
     fn print_all_metrics(&self) {
         let total: Metrics = self.get_total_metrics();
 
-        for metrics in &self.completed_metrics {
+        let completed_metrics = self.completed_metrics.lock().unwrap();
+        for metrics in &*completed_metrics {
             print!("{}", metrics);
         }
+        drop(completed_metrics);
 
-        if !self.phase_metrics.is_empty() {
+        let phase_metrics = self.phase_metrics.lock().unwrap();
+        if !phase_metrics.is_empty() {
             println!("\n=========== Phase Metrics ===========");
 
-            let group_map: HashMap<String, &Metrics> = self
-                .phase_metrics
-                .iter()
-                .map(|(name, metrics)| (name.clone(), metrics))
-                .collect();
+            let mut group_map: HashMap<String, Metrics> = HashMap::new();
+            for (name, metrics) in &*phase_metrics {
+                group_map.insert(name.clone(), metrics.clone());
+            }
+            drop(phase_metrics);
 
-            for phase_name in &self.phase_order {
+            let phase_order = self.phase_order.lock().unwrap();
+            for phase_name in &*phase_order {
                 if let Some(metrics) = group_map.get(phase_name) {
                     print!("{}", metrics);
                 }
@@ -220,7 +241,7 @@ impl BenchmarkTracker {
 }
 
 fn load_model(model_path: &str) -> Result<Session, OrtError> {
-    let model: Session = Session::builder()?.commit_from_file(model_path)?;
+    let model: Session = Session::builder()?.with_intra_threads(1)?.commit_from_file(model_path)?;
     Ok(model)
 }
 
