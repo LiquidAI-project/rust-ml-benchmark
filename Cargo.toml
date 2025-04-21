@@ -9,6 +9,7 @@ ndarray = "0.16.1"
 ort = "=2.0.0-rc.9"
 libc = "0.2"
 thiserror = "1.0"
+num_threads = "0.1.7"
 
 [profile.release-lto]
 inherits = "release"
