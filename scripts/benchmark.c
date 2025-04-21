@@ -9,6 +9,7 @@
 
 typedef struct
 {
+    char *name;
     float user_time;
     float system_time;
     float cpu_usage;
@@ -70,7 +71,14 @@ int parse_rss(char *line, long *rss)
     return 0;
 }
 
-int parse_metrics_block(FILE *fp, Metrics *out)
+float calculate_new_average(float old_avg, int currentCount, float current_value)
+{
+    if (currentCount == 0)
+        return current_value;
+    return (currentCount * old_avg + current_value) / (currentCount + 1);
+}
+
+int parse_metrics_block(FILE *fp, Metrics *out, Metrics *avg_metrics, int currentCount)
 {
     char line[MAX_LINE_LEN];
     memset(out, 0, sizeof(Metrics));
@@ -81,26 +89,31 @@ int parse_metrics_block(FILE *fp, Metrics *out)
         if (strstr(line, "Wall Clock Time:"))
         {
             parse_time_line(line, "Wall Clock Time:", &out->wall_clock);
+            avg_metrics->wall_clock = calculate_new_average(avg_metrics->wall_clock, currentCount - 1, out->wall_clock);
             found++;
         }
         else if (strstr(line, "User time:"))
         {
             parse_time_line(line, "User time:", &out->user_time);
+            avg_metrics->user_time = calculate_new_average(avg_metrics->user_time, currentCount - 1, out->user_time);
             found++;
         }
         else if (strstr(line, "System time:"))
         {
             parse_time_line(line, "System time:", &out->system_time);
+            avg_metrics->system_time = calculate_new_average(avg_metrics->system_time, currentCount - 1, out->system_time);
             found++;
         }
         else if (strstr(line, "CPU Usage:"))
         {
             parse_cpu_line(line, "CPU Usage:", &out->cpu_usage);
+            avg_metrics->cpu_usage = calculate_new_average(avg_metrics->cpu_usage, currentCount - 1, out->cpu_usage);
             found++;
         }
         else if (strstr(line, "Max RSS:"))
         {
             parse_rss(line, &out->max_rss);
+            avg_metrics->max_rss = (((currentCount -1) * avg_metrics->max_rss) + out->max_rss) / (currentCount );
             found++;
         }
         else if (strstr(line, "======================================="))
@@ -149,11 +162,31 @@ int check_args(int argc, char *argv[], int *num_iterations, const char **model_p
     return 0;
 }
 
+void print_metrics(Metrics *m, char* name)
+{
+    printf("====%s Metrics====\n", name);
+    printf("Average Wall Clock Time: %.3f ms\n", m->wall_clock);
+    printf("Average User Time: %.3f ms\n", m->user_time);
+    printf("Average System Time: %.3f ms\n", m->system_time);
+    printf("Average Cpu Usage: %.2f %%\n", m->cpu_usage);
+    printf("Average Max RSS: %ld\n", m->max_rss);
+}
+
 int main(int argc, char *argv[])
 {
     int num_iterations;
     const char *model_path;
     const char *image_path;
+    Metrics avg_loadmodel_metrics = {0};
+    Metrics avg_readimg_metrics = {0};
+    Metrics avg_redbox_metrics = {0};
+    Metrics avg_readimg_green_metrics = {0};
+    Metrics avg_inference_metrics = {0};
+    Metrics avg_postprocessing_metrics = {0};
+    Metrics avg_greenbox_metrics = {0};
+    Metrics avg_total_metrics = {0};
+
+    int current_count = 0;
 
     if (check_args(argc, argv, &num_iterations, &model_path, &image_path))
     {
@@ -212,6 +245,7 @@ int main(int argc, char *argv[])
 
     for (int i = 1; i <= num_iterations; i++)
     {
+        current_count++;
         printf("Running iteration %d\n", i);
         char command[1024];
         snprintf(command, sizeof(command),
@@ -236,42 +270,42 @@ int main(int argc, char *argv[])
             Metrics m;
             if (strstr(line, "loadmodel Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_loadmodel_metrics, current_count))
                     write_csv(loadmodel_metrics_csv, &m);
             }
             else if (strstr(line, "readimg Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_readimg_metrics, current_count))
                     write_csv(readimg_metrics_csv, &m);
             }
             else if (strstr(line, "RED BOX Phase Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_redbox_metrics, current_count))
                     write_csv(redbox_metrics_csv, &m);
             }
             else if (strstr(line, "Pre-processing Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_readimg_green_metrics, current_count))
                     write_csv(readimg_greenbox_csv, &m);
             }
             else if (strstr(line, "Inference Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_inference_metrics, current_count))
                     write_csv(inference_csv, &m);
             }
             else if (strstr(line, "Post-processing Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_postprocessing_metrics, current_count))
                     write_csv(postprocessing_csv, &m);
             }
             else if (strstr(line, "GREEN BOX Phase Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_greenbox_metrics, current_count))
                     write_csv(greenbox_metrics_csv, &m);
             }
             else if (strstr(line, "Total Metrics"))
             {
-                if (parse_metrics_block(fp, &m))
+                if (parse_metrics_block(fp, &m, &avg_total_metrics, current_count))
                     write_csv(total_metrics_csv, &m);
             }
         }
@@ -282,10 +316,19 @@ int main(int argc, char *argv[])
     fclose(loadmodel_metrics_csv);
     fclose(readimg_metrics_csv);
     fclose(redbox_metrics_csv);
+    fclose(readimg_greenbox_csv);
+    fclose(inference_csv);
+    fclose(postprocessing_csv);
     fclose(greenbox_metrics_csv);
     fclose(total_metrics_csv);
 
     printf("Benchmarking completed. CSV files generated \n");
+
+    print_metrics(&avg_loadmodel_metrics, "Load Model");
+    print_metrics(&avg_readimg_metrics,"Read Image");
+    print_metrics(&avg_readimg_green_metrics,"Pre Processing");
+    print_metrics(&avg_inference_metrics,"Inference");
+    print_metrics(&avg_postprocessing_metrics,"Post Processing");
 
     return 0;
 }
