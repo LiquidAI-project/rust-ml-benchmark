@@ -1,15 +1,14 @@
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use libc::{getrusage, rusage, RUSAGE_SELF};
 use ndarray::{Array, ArrayBase, Dim, IxDynImpl, OwnedRepr, ViewRepr};
+use num_threads::num_threads;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{Session, SessionOutputs},
     Error as OrtError,
 };
 use std::{
-    env,
-    time::{Duration, Instant},
-    collections::HashMap,
+    collections::HashMap, env, num::NonZero, thread, time::{Duration, Instant}
 };
 use thiserror::Error;
 
@@ -220,7 +219,8 @@ impl BenchmarkTracker {
 }
 
 fn load_model(model_path: &str) -> Result<Session, OrtError> {
-    let model: Session = Session::builder()?.commit_from_file(model_path)?;
+    let model: Session = Session::builder()?
+        .commit_from_file(model_path)?;
     Ok(model)
 }
 
@@ -303,6 +303,9 @@ fn main() -> Result<(), AppError> {
 
     println!("Predicted Class Index: {}", predicted_index);
     println!("Confidence Score: {:.4}", score);
+
+    let number_threads: NonZero<usize> = num_threads().unwrap();
+    println!("Number of Threads: {:?}", number_threads);
 
     Ok(())
 }
