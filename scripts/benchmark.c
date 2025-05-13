@@ -113,7 +113,7 @@ int parse_metrics_block(FILE *fp, Metrics *out, Metrics *avg_metrics, int curren
         else if (strstr(line, "Max RSS:"))
         {
             parse_rss(line, &out->max_rss);
-            avg_metrics->max_rss = (((currentCount -1) * avg_metrics->max_rss) + out->max_rss) / (currentCount );
+            avg_metrics->max_rss = (((currentCount - 1) * avg_metrics->max_rss) + out->max_rss) / (currentCount);
             found++;
         }
         else if (strstr(line, "======================================="))
@@ -162,7 +162,7 @@ int check_args(int argc, char *argv[], int *num_iterations, const char **model_p
     return 0;
 }
 
-void print_metrics(Metrics *m, char* name)
+void print_metrics(Metrics *m, char *name)
 {
     printf("====%s Metrics====\n", name);
     printf("Average Wall Clock Time: %.3f ms\n", m->wall_clock);
@@ -222,25 +222,15 @@ int main(int argc, char *argv[])
     write_csv_header(greenbox_metrics_csv);
     write_csv_header(total_metrics_csv);
 
-    struct stat buffer;
-    if (stat("../target/release/rust-ml-benchmark", &buffer) != 0)
-    {
-        printf("Rust binary not found. Compiling...\n");
+    char build_command[1024];
+    snprintf(build_command, sizeof(build_command),
+             "MODEL_PATH=\"%s\" IMAGE_PATH=\"%s\" cargo build --release --manifest-path=../Cargo.toml",
+             model_path, image_path);
 
-        char build_command[1024];
-        snprintf(build_command, sizeof(build_command),
-                 "MODEL_PATH=\"%s\" IMAGE_PATH=\"%s\" cargo build --release --manifest-path=../Cargo.toml",
-                 model_path, image_path);
-
-        if (system(build_command) != 0)
-        {
-            fprintf(stderr, "Rust compilation failed.\n");
-            return 1;
-        }
-    }
-    else
+    if (system(build_command) != 0)
     {
-        printf("Rust binary found. Skipping compilation.\n");
+        fprintf(stderr, "Rust compilation failed.\n");
+        return 1;
     }
 
     for (int i = 1; i <= num_iterations; i++)
@@ -325,10 +315,10 @@ int main(int argc, char *argv[])
     printf("Benchmarking completed. CSV files generated \n");
 
     print_metrics(&avg_loadmodel_metrics, "Load Model");
-    print_metrics(&avg_readimg_metrics,"Read Image");
-    print_metrics(&avg_readimg_green_metrics,"Pre Processing");
-    print_metrics(&avg_inference_metrics,"Inference");
-    print_metrics(&avg_postprocessing_metrics,"Post Processing");
+    print_metrics(&avg_readimg_metrics, "Read Image");
+    print_metrics(&avg_readimg_green_metrics, "Pre Processing");
+    print_metrics(&avg_inference_metrics, "Inference");
+    print_metrics(&avg_postprocessing_metrics, "Post Processing");
 
     return 0;
 }
