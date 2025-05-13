@@ -8,7 +8,7 @@ use ort::{
     Error as OrtError,
 };
 use std::{
-    collections::HashMap, env, num::NonZero, time::{Duration, Instant}
+    collections::HashMap, env, num::NonZero, thread, time::{Duration, Instant}
 };
 use thiserror::Error;
 
