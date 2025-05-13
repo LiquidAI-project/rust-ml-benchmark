@@ -8,7 +8,7 @@ use ort::{
     Error as OrtError,
 };
 use std::{
-    collections::HashMap, env, num::NonZero, time::{Duration, Instant}
+    collections::HashMap, env, num::NonZero, thread, time::{Duration, Instant}
 };
 use thiserror::Error;
 
@@ -219,8 +219,7 @@ impl BenchmarkTracker {
 }
 
 fn load_model(model_path: &str) -> Result<Session, OrtError> {
-    let model: Session = Session::builder()?
-        .commit_from_file(model_path)?;
+    let model: Session = Session::builder()?.commit_from_file(model_path)?;
     Ok(model)
 }
 
@@ -270,6 +269,7 @@ fn main() -> Result<(), AppError> {
 
     tracker.start_operation("loadmodel");
     let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
+//    thread::sleep(Duration::from_millis(500));
     tracker.finish_operation();
 
     tracker.start_operation("readimg");
