@@ -1,0 +1,71 @@
+---
+- name: Benchmark automation
+  hosts: all
+  vars:
+    local_repo_path: "../Benchmark-Setup"
+    remote_repo_path: "~/benchmark-ansible"
+    local_results_directory: "../Results"
+    remote_results_directory: "~/benchmark-ansible/Benchmark-Setup/scripts/bench"
+    iterations: 1000
+
+  pre_tasks:
+    - name: update repositories
+      apt:
+        update_cache: yes
+      become: true
+      changed_when: false
+
+  tasks:
+
+    - name: Copy repo to the target device
+      synchronize:
+        src: "../Benchmark-Setup"
+        dest: "~/benchmark-ansible"
+        recursive: yes
+        delete: no
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=target"
+          - "--exclude=*.lock"
+          - "--exclude=scripts/benchmark"
+          - "--exclude=scripts/*.txt"
+
+    - name: Check if cargo is already installed
+      shell: command -v cargo
+      register: cargo_exists
+      ignore_errors: yes
+
+    - name: Download rust installer
+      when: cargo_exists is failed
+      get_url:
+        url: https://sh.rustup.rs
+        dest: /tmp/sh.rustup.rs
+        mode: '0755'
+        force: yes
+      tags:
+        - rust
+
+    - name: Run the cargo installer
+      when: cargo_exists is failed
+      shell: /tmp/sh.rustup.rs -y
+      tags:
+        - rust
+
+    - name: Run the benchmark script
+      shell: >
+        cd {{ remote_repo_path }}/Benchmark-Setup/scripts &&
+        . ~/.cargo/env &&
+        gcc benchmark.c -o benchmark &&
+        ./benchmark {{iterations}} ../assets/models/mobilenetv2-10.onnx ../assets/imgs/unseen_dog.jpg
+
+    - name: Fetch results from remote
+      ansible.builtin.synchronize:
+        src: "{{ remote_results_directory }}"
+        dest: "{{ local_results_directory }}/$HOSTNAME/"
+        mode: pull
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=target"
+          - "--exclude=*.lock"
+          - "--exclude=scripts/benchmark"
+          - "--exclude=scripts/*.txt"

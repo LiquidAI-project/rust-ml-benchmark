@@ -1,0 +1,70 @@
+============= envload Metrics =============
+Wall Clock Time: 9.360875ms
+User time: 9.062ms
+System time: 297µs
+Max RSS: 5898240 bytes
+CPU Usage: 99.97997%
+=======================================
+============= loadmodel Metrics =============
+Wall Clock Time: 11.567958ms
+User time: 6.25ms
+System time: 5.021ms
+Max RSS: 42860544 bytes
+CPU Usage: 97.43293%
+=======================================
+============= readimg Metrics =============
+Wall Clock Time: 4.041041ms
+User time: 3.8ms
+System time: 242µs
+Max RSS: 3751936 bytes
+CPU Usage: 100.023735%
+=======================================
+============= Pre-processing Metrics =============
+Wall Clock Time: 5.613083ms
+User time: 5.267ms
+System time: 346µs
+Max RSS: 3735552 bytes
+CPU Usage: 99.99852%
+=======================================
+============= Inference Metrics =============
+Wall Clock Time: 10.405792ms
+User time: 15.982ms
+System time: 922µs
+Max RSS: 2080768 bytes
+CPU Usage: 162.44798%
+=======================================
+============= Post-processing Metrics =============
+Wall Clock Time: 2.334µs
+User time: 2µs
+System time: 0ns
+Max RSS: 0 bytes
+CPU Usage: 85.689804%
+=======================================
+
+=========== Phase Metrics ===========
+============= RED BOX Phase Metrics =============
+Wall Clock Time: 24.969874ms
+User time: 19.112ms
+System time: 5.56ms
+Max RSS: 42860544 bytes
+CPU Usage: 98.80707%
+=======================================
+============= GREEN BOX Phase Metrics =============
+Wall Clock Time: 16.021209ms
+User time: 21.251ms
+System time: 1.268ms
+Max RSS: 3735552 bytes
+CPU Usage: 140.55743%
+=======================================
+====================================
+
+============= Total Metrics =============
+Wall Clock Time: 41.008083ms
+User time: 40.376ms
+System time: 6.838ms
+Max RSS: 58408960 bytes
+CPU Usage: 115.13339%
+=======================================
+Predicted Class Index: 259
+Confidence Score: 14.6988
+Number of Threads: 4
