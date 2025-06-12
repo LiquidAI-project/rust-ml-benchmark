@@ -199,14 +199,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    FILE *loadmodel_metrics_csv = fopen("./bench/loadmodel.csv", "w");
-    FILE *readimg_metrics_csv = fopen("./bench/readimg.csv", "w");
-    FILE *redbox_metrics_csv = fopen("./bench/redbox.csv", "w");
-    FILE *readimg_greenbox_csv = fopen("./bench/readimg_greenbox.csv", "w");
-    FILE *inference_csv = fopen("./bench/inference.csv", "w");
-    FILE *postprocessing_csv = fopen("./bench/postprocessing.csv", "w");
-    FILE *greenbox_metrics_csv = fopen("./bench/greenbox.csv", "w");
-    FILE *total_metrics_csv = fopen("./bench/total.csv", "w");
+    FILE *loadmodel_metrics_csv = fopen("./loadmodel.csv", "w");
+    FILE *readimg_metrics_csv = fopen("./readimg.csv", "w");
+    FILE *redbox_metrics_csv = fopen("./redbox.csv", "w");
+    FILE *readimg_greenbox_csv = fopen("./readimg_greenbox.csv", "w");
+    FILE *inference_csv = fopen("./inference.csv", "w");
+    FILE *postprocessing_csv = fopen("./postprocessing.csv", "w");
+    FILE *greenbox_metrics_csv = fopen("./greenbox.csv", "w");
+    FILE *total_metrics_csv = fopen("./total.csv", "w");
     if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !readimg_greenbox_csv || !inference_csv || !postprocessing_csv || !greenbox_metrics_csv || !total_metrics_csv)
     {
         fprintf(stderr, "Failed to open CSV file\n");
