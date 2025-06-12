@@ -1,10 +1,11 @@
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use libc::{getrusage, rusage, RUSAGE_SELF};
-use ndarray::{Array, ArrayBase, Dim, IxDynImpl, OwnedRepr, ViewRepr};
+use ndarray::{Array, ArrayBase, Dim, OwnedRepr};
 use num_threads::num_threads;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{Session, SessionOutputs},
+    value::{TensorValueType, Value},
     Error as OrtError,
 };
 use std::{
@@ -23,6 +24,8 @@ enum AppError {
     ImageLoadError(#[from] image::ImageError),
     #[error("ORT error: {0}")]
     OrtError(#[from] OrtError),
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 #[derive(Debug, Clone)]
@@ -228,7 +231,7 @@ fn load_model(model_path: &str) -> Result<Session, OrtError> {
     Ok(model)
 }
 
-fn process_image(original_img: DynamicImage) -> ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> {
+fn process_image(original_img: DynamicImage) -> Value<TensorValueType<f32>> {
     let img: DynamicImage = original_img.resize_exact(224, 224, FilterType::CatmullRom);
     let mut input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = Array::zeros((1, 3, 224, 224));
     for pixel in img.pixels() {
@@ -239,17 +242,25 @@ fn process_image(original_img: DynamicImage) -> ArrayBase<OwnedRepr<f32>, Dim<[u
         input[[0, 1, y, x]] = (g as f32) / 255.;
         input[[0, 2, y, x]] = (b as f32) / 255.;
     }
-    input
+    Value::from_array(input).unwrap()
 }
 
-fn post_process_outputs(output_array: &ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>) -> (usize, f32) {
+fn post_process_outputs(outputs: SessionOutputs<'_>) -> Result<(usize, f32), AppError> {
+    let (shape, data): (&ort::tensor::Shape, &[f32]) = outputs[0].try_extract_tensor::<f32>()?;
+
+    let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+    let dim: Dim<ndarray::IxDynImpl> = ndarray::IxDyn(&dims);
+
+    let output_array: ArrayBase<ndarray::ViewRepr<&f32>, Dim<ndarray::IxDynImpl>> =
+        ndarray::ArrayView::from_shape(dim, data)
+            .map_err(|e| AppError::Other(format!("Shape error: {}", e)))?;
     let (predicted_index, &score) = output_array
         .iter()
         .enumerate()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
         .unwrap();
 
-    (predicted_index, score)
+    Ok((predicted_index, score))
 }
 
 fn main() -> Result<(), AppError> {
@@ -273,7 +284,7 @@ fn main() -> Result<(), AppError> {
     tracker.finish_operation();
 
     tracker.start_operation("loadmodel");
-    let model: Session = load_model(model_path).map_err(AppError::OrtError)?;
+    let mut model: Session = load_model(model_path).map_err(AppError::OrtError)?;
     tracker.finish_operation();
 
     tracker.start_operation("readimg");
@@ -286,19 +297,16 @@ fn main() -> Result<(), AppError> {
     tracker.start_phase("GREEN BOX Phase");
 
     tracker.start_operation("Pre-processing");
-    let input: ArrayBase<OwnedRepr<f32>, Dim<[usize; 4]>> = process_image(original_img);
+    let input: Value<TensorValueType<f32>> = process_image(original_img);
     tracker.finish_operation();
 
     tracker.start_operation("Inference");
-    let outputs: SessionOutputs<'_, '_> = model.run(ort::inputs![input]?)?;
+
+    let outputs: SessionOutputs<'_> = model.run(ort::inputs![input])?;
     tracker.finish_operation();
 
     tracker.start_operation("Post-processing");
-    let output_tensor: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>> =
-        outputs[0].try_extract_tensor::<f32>()?;
-    let output_array: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>> = output_tensor.view();
-
-    let (predicted_index, score) = post_process_outputs(&output_array);
+    let (predicted_index, score) = post_process_outputs(outputs).unwrap();
     tracker.finish_operation();
 
     tracker.end_phase("GREEN BOX Phase");
