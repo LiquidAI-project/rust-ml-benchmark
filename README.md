@@ -34,12 +34,12 @@ Ansible is used to automate the entire workflow:
 1. **Install** rust if not installed on the remote device
 2. **Transfer source code and assets** to the remote device
 3. **Run the benchmark script** present in the scripts folder in the Benchmark setup
-3. **Collect result files** and copy them back into the `Results/` directory
+3. **Collect result files** and copy them back into the [Results](Results) directory
 
 ### Configuration
 
-- `Ansible/Benchmark.yaml` is the main playbook orchestrating the process.
-- `Ansible/inventory/hosts.ini` defines the target host(s).
+- [Ansible/Benchmark.yaml](Ansible/Benchmark.yaml) is the main playbook orchestrating the process.
+- [Ansible/inventory/hosts.ini](Ansible/inventory/hosts.ini) defines the target host(s).
 - SSH keys or passwords must be configured for Ansible to access the devices.
 
 ### Run the Deployment
