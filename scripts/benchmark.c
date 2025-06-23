@@ -231,14 +231,14 @@ int main(int argc, char *argv[])
     snprintf(path_greenbox, sizeof(path_greenbox), "./%s/greenbox.csv", folder_name);
     snprintf(path_total, sizeof(path_total), "./%s/total.csv", folder_name);
 
-    FILE *loadmodel_metrics_csv = fopen(path_loadmodel, "w");
-    FILE *readimg_metrics_csv = fopen(path_readimg, "w");
-    FILE *redbox_metrics_csv = fopen(path_redbox, "w");
-    FILE *readimg_greenbox_csv = fopen(path_readimg_greenbox, "w");
-    FILE *inference_csv = fopen(path_inference, "w");
-    FILE *postprocessing_csv = fopen(path_postprocessing, "w");
-    FILE *greenbox_metrics_csv = fopen(path_greenbox, "w");
-    FILE *total_metrics_csv = fopen(path_total, "w");
+    FILE *loadmodel_metrics_csv = fopen(path_loadmodel, "a");
+    FILE *readimg_metrics_csv = fopen(path_readimg, "a");
+    FILE *redbox_metrics_csv = fopen(path_redbox, "a");
+    FILE *readimg_greenbox_csv = fopen(path_readimg_greenbox, "a");
+    FILE *inference_csv = fopen(path_inference, "a");
+    FILE *postprocessing_csv = fopen(path_postprocessing, "a");
+    FILE *greenbox_metrics_csv = fopen(path_greenbox, "a");
+    FILE *total_metrics_csv = fopen(path_total, "a");
 
     if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !readimg_greenbox_csv || !inference_csv || !postprocessing_csv || !greenbox_metrics_csv || !total_metrics_csv)
     {
