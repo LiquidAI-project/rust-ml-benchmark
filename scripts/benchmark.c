@@ -173,6 +173,60 @@ void print_metrics(Metrics *m, char *name)
     printf("Average Max RSS: %ld\n", m->max_rss);
 }
 
+void save_metrics(Metrics *m, char *name, FILE *fp)
+{
+    fprintf(fp, "====%s Metrics====\n", name);
+    fprintf(fp, "Average Wall Clock Time: %.3f ms\n", m->wall_clock);
+    fprintf(fp, "Average User Time: %.3f ms\n", m->user_time);
+    fprintf(fp, "Average System Time: %.3f ms\n", m->system_time);
+    fprintf(fp, "Average Cpu Usage: %.2f %%\n", m->cpu_usage);
+    fprintf(fp, "Average Max RSS: %ld\n", m->max_rss);
+}
+
+void save_metrics_stats(const char *file_path,
+                        Metrics *avg_loadmodel_metrics,
+                        Metrics *avg_readimg_metrics,
+                        Metrics *avg_redbox_metrics,
+                        Metrics *avg_readimg_green_metrics,
+                        Metrics *avg_inference_metrics,
+                        Metrics *avg_postprocessing_metrics,
+                        Metrics *avg_greenbox_metrics,
+                        Metrics *avg_total_metrics)
+{
+    FILE *file = fopen(file_path, "w");
+    if (!file)
+    {
+        perror("Failed to open stats file for writing");
+        return;
+    }
+
+    save_metrics(avg_loadmodel_metrics, "Load Model", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_readimg_metrics, "Read Image (Red Box)", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_redbox_metrics, "Red Box", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_readimg_green_metrics, "Read Image (Green Box)", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_inference_metrics, "Inference", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_postprocessing_metrics, "Postprocessing", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_greenbox_metrics, "Green Box", file);
+    fprintf(file, "\n");
+
+    save_metrics(avg_total_metrics, "Total", file);
+    fprintf(file, "\n");
+
+    fclose(file);
+}
+
 int main(int argc, char *argv[])
 {
     int num_iterations;
@@ -195,21 +249,26 @@ int main(int argc, char *argv[])
     }
 
     time_t t = time(NULL);
-    struct tm time = *localtime(&t);
+    struct tm timeinfo = *localtime(&t);
 
     char date[20];
-    strftime(date, sizeof(date), "%Y_%m_%d", &time);
-
-    printf("Formatted Date: %s\n", date);
+    strftime(date, sizeof(date), "%Y_%m_%d", &timeinfo);
 
     char time_str[20];
-    strftime(time_str, sizeof(time_str), "%H_%M_%S", &time);
+    strftime(time_str, sizeof(time_str), "%H_%M_%S", &timeinfo);
 
-    const char *folder_name = date;
-
-    if (mkdir(folder_name, 0777) == -1 && errno != EEXIST)
+    if (mkdir(date, 0777) == -1 && errno != EEXIST)
     {
-        perror("Failed to create directory");
+        perror("Failed to create date directory");
+        return 1;
+    }
+
+    char full_folder_path[256];
+    snprintf(full_folder_path, sizeof(full_folder_path), "%s/%s", date, time_str);
+
+    if (mkdir(full_folder_path, 0777) == -1 && errno != EEXIST)
+    {
+        perror("Failed to create time directory inside date folder");
         return 1;
     }
 
@@ -221,15 +280,17 @@ int main(int argc, char *argv[])
     char path_postprocessing[256];
     char path_greenbox[256];
     char path_total[256];
+    char stats_summary_path[256];
 
-    snprintf(path_loadmodel, sizeof(path_loadmodel), "./%s/loadmodel.csv", folder_name);
-    snprintf(path_readimg, sizeof(path_readimg), "./%s/readimg.csv", folder_name);
-    snprintf(path_redbox, sizeof(path_redbox), "./%s/redbox.csv", folder_name);
-    snprintf(path_readimg_greenbox, sizeof(path_readimg_greenbox), "./%s/readimg_greenbox.csv", folder_name);
-    snprintf(path_inference, sizeof(path_inference), "./%s/inference.csv", folder_name);
-    snprintf(path_postprocessing, sizeof(path_postprocessing), "./%s/postprocessing.csv", folder_name);
-    snprintf(path_greenbox, sizeof(path_greenbox), "./%s/greenbox.csv", folder_name);
-    snprintf(path_total, sizeof(path_total), "./%s/total.csv", folder_name);
+    snprintf(path_loadmodel, sizeof(path_loadmodel), "./%s/loadmodel.csv", full_folder_path);
+    snprintf(path_readimg, sizeof(path_readimg), "./%s/readimg.csv", full_folder_path);
+    snprintf(path_redbox, sizeof(path_redbox), "./%s/redbox.csv", full_folder_path);
+    snprintf(path_readimg_greenbox, sizeof(path_readimg_greenbox), "./%s/readimg_greenbox.csv", full_folder_path);
+    snprintf(path_inference, sizeof(path_inference), "./%s/inference.csv", full_folder_path);
+    snprintf(path_postprocessing, sizeof(path_postprocessing), "./%s/postprocessing.csv", full_folder_path);
+    snprintf(path_greenbox, sizeof(path_greenbox), "./%s/greenbox.csv", full_folder_path);
+    snprintf(path_total, sizeof(path_total), "./%s/total.csv", full_folder_path);
+    snprintf(stats_summary_path, sizeof(stats_summary_path), "./%s/stats_summary.txt", full_folder_path);
 
     FILE *loadmodel_metrics_csv = fopen(path_loadmodel, "a");
     FILE *readimg_metrics_csv = fopen(path_readimg, "a");
@@ -272,8 +333,8 @@ int main(int argc, char *argv[])
         printf("Running iteration %d\n", i);
         char command[1024];
         snprintf(command, sizeof(command),
-                 "../target/release/rust-ml-benchmark \"%s\" \"%s\" > %s.txt",
-                 model_path, image_path, time_str);
+                 "../target/release/rust-ml-benchmark \"%s\" \"%s\" > %s",
+                 model_path, image_path, stats_summary_path);
 
         if (system(command) != 0)
         {
@@ -281,7 +342,8 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        FILE *fp = fopen("tmp_output.txt", "r");
+        FILE *fp = fopen(stats_summary_path, "r");
+
         if (!fp)
         {
             continue;
@@ -332,8 +394,6 @@ int main(int argc, char *argv[])
                     write_csv(total_metrics_csv, &m);
             }
         }
-
-        fclose(fp);
     }
 
     fclose(loadmodel_metrics_csv);
@@ -352,6 +412,16 @@ int main(int argc, char *argv[])
     print_metrics(&avg_readimg_green_metrics, "Pre Processing");
     print_metrics(&avg_inference_metrics, "Inference");
     print_metrics(&avg_postprocessing_metrics, "Post Processing");
+
+    save_metrics_stats(stats_summary_path,
+                       &avg_loadmodel_metrics,
+                       &avg_readimg_metrics,
+                       &avg_redbox_metrics,
+                       &avg_readimg_green_metrics,
+                       &avg_inference_metrics,
+                       &avg_postprocessing_metrics,
+                       &avg_greenbox_metrics,
+                       &avg_total_metrics);
 
     return 0;
 }
