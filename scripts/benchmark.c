@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 
 #define MAX_LINE_LEN 512
 
@@ -193,20 +194,52 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (mkdir("bench", 0777) == -1 && errno != EEXIST)
+    time_t t = time(NULL);
+    struct tm time = *localtime(&t);
+
+    char date[20];
+    strftime(date, sizeof(date), "%Y_%m_%d", &time);
+
+    printf("Formatted Date: %s\n", date);
+
+    char time_str[20];
+    strftime(time_str, sizeof(time_str), "%H_%M_%S", &time);
+
+    const char *folder_name = date;
+
+    if (mkdir(folder_name, 0777) == -1 && errno != EEXIST)
     {
         perror("Failed to create directory");
         return 1;
     }
 
-    FILE *loadmodel_metrics_csv = fopen("./bench/loadmodel.csv", "w");
-    FILE *readimg_metrics_csv = fopen("./bench/readimg.csv", "w");
-    FILE *redbox_metrics_csv = fopen("./bench/redbox.csv", "w");
-    FILE *readimg_greenbox_csv = fopen("./bench/readimg_greenbox.csv", "w");
-    FILE *inference_csv = fopen("./bench/inference.csv", "w");
-    FILE *postprocessing_csv = fopen("./bench/postprocessing.csv", "w");
-    FILE *greenbox_metrics_csv = fopen("./bench/greenbox.csv", "w");
-    FILE *total_metrics_csv = fopen("./bench/total.csv", "w");
+    char path_loadmodel[256];
+    char path_readimg[256];
+    char path_redbox[256];
+    char path_readimg_greenbox[256];
+    char path_inference[256];
+    char path_postprocessing[256];
+    char path_greenbox[256];
+    char path_total[256];
+
+    snprintf(path_loadmodel, sizeof(path_loadmodel), "./%s/loadmodel.csv", folder_name);
+    snprintf(path_readimg, sizeof(path_readimg), "./%s/readimg.csv", folder_name);
+    snprintf(path_redbox, sizeof(path_redbox), "./%s/redbox.csv", folder_name);
+    snprintf(path_readimg_greenbox, sizeof(path_readimg_greenbox), "./%s/readimg_greenbox.csv", folder_name);
+    snprintf(path_inference, sizeof(path_inference), "./%s/inference.csv", folder_name);
+    snprintf(path_postprocessing, sizeof(path_postprocessing), "./%s/postprocessing.csv", folder_name);
+    snprintf(path_greenbox, sizeof(path_greenbox), "./%s/greenbox.csv", folder_name);
+    snprintf(path_total, sizeof(path_total), "./%s/total.csv", folder_name);
+
+    FILE *loadmodel_metrics_csv = fopen(path_loadmodel, "w");
+    FILE *readimg_metrics_csv = fopen(path_readimg, "w");
+    FILE *redbox_metrics_csv = fopen(path_redbox, "w");
+    FILE *readimg_greenbox_csv = fopen(path_readimg_greenbox, "w");
+    FILE *inference_csv = fopen(path_inference, "w");
+    FILE *postprocessing_csv = fopen(path_postprocessing, "w");
+    FILE *greenbox_metrics_csv = fopen(path_greenbox, "w");
+    FILE *total_metrics_csv = fopen(path_total, "w");
+
     if (!loadmodel_metrics_csv || !readimg_metrics_csv || !redbox_metrics_csv || !readimg_greenbox_csv || !inference_csv || !postprocessing_csv || !greenbox_metrics_csv || !total_metrics_csv)
     {
         fprintf(stderr, "Failed to open CSV file\n");
@@ -239,8 +272,8 @@ int main(int argc, char *argv[])
         printf("Running iteration %d\n", i);
         char command[1024];
         snprintf(command, sizeof(command),
-                 "../target/release/rust-ml-benchmark \"%s\" \"%s\" > tmp_output.txt",
-                 model_path, image_path);
+                 "../target/release/rust-ml-benchmark \"%s\" \"%s\" > %s.txt",
+                 model_path, image_path, time_str);
 
         if (system(command) != 0)
         {
